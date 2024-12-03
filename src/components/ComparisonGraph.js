@@ -12,7 +12,7 @@ const ComparisonGraph = () => {
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [period, setPeriod] = useState("monthly");
-  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // Default to current month
   const [selectedYear, setSelectedYear] = useState("");
 
   useEffect(() => {
@@ -20,9 +20,9 @@ const ComparisonGraph = () => {
       const dengueCollection = collection(db, "dengueData");
       const dengueSnapshot = await getDocs(dengueCollection);
       const dataList = dengueSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        id: doc.id,
+        ...doc.data(),
+      }));
       setData(dataList);
     };
 

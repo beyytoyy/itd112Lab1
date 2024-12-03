@@ -1,21 +1,23 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, getDocs } from "firebase/firestore";  // Import collection and getDocs
-import { getAnalytics } from "firebase/analytics";
+import { getFirestore, collection, addDoc, getDocs } from "firebase/firestore"; // Added getDocs import
 
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyCloVqWmozlm6SzsU4L9QlbjWgziPOMOD0",
-  authDomain: "itd112lab1mangoda.firebaseapp.com",
-  projectId: "itd112lab1mangoda",
-  storageBucket: "itd112lab1mangoda.appspot.com",
-  messagingSenderId: "644177260301",
-  appId: "1:644177260301:web:367e15fede1dcbf0960a44",
-  measurementId: "G-JQWNNFHP9G"
+  apiKey: "AIzaSyDka3Yzozax0cNjm30qNVvhKiQ9ktQlPgE",
+  authDomain: "itd112lab3mangoda-7ae11.firebaseapp.com",
+  projectId: "itd112lab3mangoda-7ae11",
+  storageBucket: "itd112lab3mangoda-7ae11.firebasestorage.app",
+  messagingSenderId: "204524746379",
+  appId: "1:204524746379:web:7cb391f14c18b503cb068e",
+  measurementId: "G-Z03HVV7N6X"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+
+// Initialize Firestore
 const db = getFirestore(app);
 
-// Export collection and getDocs
-export { db, collection, getDocs };
+// Export Firestore methods
+export { db, collection, addDoc, getDocs }; // Added getDocs export

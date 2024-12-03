@@ -12,7 +12,7 @@ const CorrelationGraphBar = () => {
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [period, setPeriod] = useState("monthly");
-  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // Default to current month
   const [selectedYear, setSelectedYear] = useState("");
 
   useEffect(() => {
@@ -70,7 +70,7 @@ const CorrelationGraphBar = () => {
       },
       title: {
         display: true,
-        text: 'Dengue Cases and Deaths Comparison',
+        text: 'Dengue Cases and Deaths Correlation',
       },
     },
     scales: {
@@ -99,7 +99,7 @@ const CorrelationGraphBar = () => {
           <Form.Control as="select" onChange={(e) => setSelectedMonth(e.target.value)} value={selectedMonth}>
             <option value="">Select Month</option>
             {[...Array(12).keys()].map(i => (
-              <option key={i+1} value={i+1}>{i+1}</option>
+              <option key={i + 1} value={i + 1}>{i + 1}</option>
             ))}
           </Form.Control>
         </Form.Group>

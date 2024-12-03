@@ -1,214 +1,282 @@
 import React, { useState, useEffect } from "react";
-import { collection, getDocs, doc, deleteDoc, updateDoc, setDoc, writeBatch } from "firebase/firestore";
-import { db } from "../firebase";
-import { Table, Button, Container, Row, Col, Form } from 'react-bootstrap';
-import Papa from 'papaparse'; // Import Papa for CSV parsing
+import { Table, Button, Container, Row, Col, Form, Alert } from "react-bootstrap";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faEdit, faTrash, faUpload } from "@fortawesome/free-solid-svg-icons";
+import Papa from "papaparse"; // For CSV parsing
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { db } from "../firebase";  // Firebase setup
 
 const DengueDataList = () => {
   const [dengueData, setDengueData] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({
-    location: "",
+    loc: "",
     cases: "",
     deaths: "",
     date: "",
-    regions: "",
+    Region: "",
   });
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [dataPerPage, setDataPerPage] = useState(5);
+  const [searchTerm, setSearchTerm] = useState("");
 
+  const [showAlert, setShowAlert] = useState({ type: "", message: "" });
+
+  // Show alerts
+  const showAlertMessage = (type, message) => {
+    setShowAlert({ type, message });
+    setTimeout(() => setShowAlert({ type: "", message: "" }), 3000);
+  };
+
+  // Fetch data from Firestore
   useEffect(() => {
     const fetchData = async () => {
-      const dengueCollection = collection(db, "dengueData");
-      const dengueSnapshot = await getDocs(dengueCollection);
-      const dataList = dengueSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setDengueData(dataList);
+      try {
+        const querySnapshot = await getDocs(collection(db, "dengueData"));
+        const data = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setDengueData(data);
+      } catch (error) {
+        console.error("Error fetching data from Firestore:", error);
+      }
     };
-
     fetchData();
   }, []);
 
+  // Handle deleting data from Firebase
   const handleDelete = async (id) => {
-    const dengueDocRef = doc(db, "dengueData", id);
     try {
-      await deleteDoc(dengueDocRef);
-      setDengueData(dengueData.filter((data) => data.id !== id));
-      alert("Data deleted successfully!");
+      await deleteDoc(doc(db, "dengueData", id));
+      setDengueData(prevData => prevData.filter((data) => data.id !== id));
+      showAlertMessage("success", "Data deleted successfully!");
     } catch (error) {
-      console.error("Error deleting document: ", error);
+      console.error("Error deleting data:", error);
+      showAlertMessage("danger", "Error deleting data.");
     }
   };
 
+  // Handle editing data
   const handleEdit = (data) => {
     setEditingId(data.id);
     setEditForm({
-      location: data.location,
+      loc: data.loc,
       cases: data.cases,
       deaths: data.deaths,
       date: data.date,
-      regions: data.regions,
+      Region: data.Region,
     });
   };
 
+  // Handle updating data
   const handleUpdate = async (e) => {
     e.preventDefault();
-    const dengueDocRef = doc(db, "dengueData", editingId);
     try {
-      await updateDoc(dengueDocRef, {
-        location: editForm.location,
-        cases: Number(editForm.cases),
-        deaths: Number(editForm.deaths),
-        date: editForm.date,
-        regions: editForm.regions,
-      });
-      setDengueData(dengueData.map((data) =>
-        data.id === editingId ? { id: editingId, ...editForm } : data
-      ));
+      await updateDoc(doc(db, "dengueData", editingId), editForm);
+      setDengueData(prevData =>
+        prevData.map((data) =>
+          data.id === editingId ? { id: editingId, ...editForm } : data
+        )
+      );
       setEditingId(null);
-      alert("Data updated successfully!");
+      showAlertMessage("success", "Data updated successfully!");
     } catch (error) {
-      console.error("Error updating document: ", error);
+      console.error("Error updating data:", error);
+      showAlertMessage("danger", "Error updating data.");
     }
   };
 
-  // Handle CSV Upload
+  // Handle uploading CSV and saving to Firebase
   const handleCSVUpload = async (e) => {
-    const file = e.target.files[0]; // Get the file
+    const file = e.target.files[0];
     if (file) {
       Papa.parse(file, {
-        header: true, // Assumes the first row contains headers
+        header: true,
         skipEmptyLines: true,
-        complete: async function (results) {
-          // Remove the first two lines which are not needed
-          const filteredData = results.data.slice(2).map((row) => ({
-            location: row['loc'] || row['#adm2+name'],
-            cases: Number(row['cases'] || row['#affected+infected']),
-            deaths: Number(row['deaths'] || row['#affected+killed']),
-            date: row['date'] || row['#date'],
-            regions: row['Region'] || row['#region'],
-          }));
-
-          // Filter out rows where any required field is missing
-          const cleanedData = filteredData.filter(row =>
-            row.location && !isNaN(row.cases) && !isNaN(row.deaths) && row.date && row.regions
-          );
-
+        complete: async (results) => {
+          const newData = results.data;
           try {
-            const batch = writeBatch(db); // Use Firestore batch operations for efficiency
-            cleanedData.forEach(data => {
-              const docRef = doc(collection(db, "dengueData")); // Create a new document reference
-              batch.set(docRef, data); // Add each data object to Firestore
-            });
-
-            await batch.commit();
-            setDengueData([...dengueData, ...cleanedData]); // Update the state with the new data
-            alert("CSV file successfully uploaded and processed!");
+            const batch = [];
+            for (const item of newData) {
+              batch.push(
+                addDoc(collection(db, "dengueData"), item) // Add each record to Firestore
+              );
+            }
+            await Promise.all(batch); // Wait for all records to be added
+            setDengueData(prevData => [...prevData, ...newData]);
+            showAlertMessage("success", "CSV file uploaded and data added to Firebase successfully!");
           } catch (error) {
-            console.error("Error uploading data: ", error);
+            showAlertMessage("danger", "Error uploading CSV to Firebase.");
+            console.error("CSV upload error:", error);
           }
         },
-        error: function (error) {
-          console.error("Error parsing CSV file: ", error);
+        error: (error) => {
+          showAlertMessage("danger", "Error parsing CSV file.");
+          console.error("CSV parse error:", error);
         },
       });
     }
   };
 
+  // Filter data based on search term
+  const filteredData = dengueData.filter((data) =>
+    data.loc.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredData.length / dataPerPage);
+  const currentData = filteredData.slice(
+    (currentPage - 1) * dataPerPage,
+    currentPage * dataPerPage
+  );
+
   return (
-    <Container>
-      <Row className="mt-3 mb-2">
-        <Col className="d-flex justify-content-end">
+    <Container className="mt-4">
+      {/* Alert */}
+      {showAlert.message && (
+        <Alert variant={showAlert.type} className="text-center">
+          {showAlert.message}
+        </Alert>
+      )}
+
+      <Row className="mb-3">
+        <Col md={6}>
+          <h3>Dengue Data List</h3>
+        </Col>
+        <Col md={6} className="d-flex justify-content-end">
           <Form.Group>
             <Form.Control
               type="file"
-              id="csvUpload"
               accept=".csv"
-              onChange={handleCSVUpload}
+              onChange={handleCSVUpload} // Bind the CSV upload handler
+              className="mb-2"
             />
           </Form.Group>
         </Col>
       </Row>
 
-      {editingId ? (
-        <form onSubmit={handleUpdate}>
-          <Form.Group>
+      {/* Search and filters */}
+      <Container style={{ background: "#e8e9eb", padding: "20px", borderRadius: "5px" }}>
+        <Row className="mb-4">
+          <Col className="d-flex justify-content-end">
             <Form.Control
               type="text"
-              placeholder="Location"
-              value={editForm.location}
-              onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
-              required
+              placeholder="Search by Location..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ width: "20%" }}
             />
-          </Form.Group>
-          <Form.Group>
-            <Form.Control
-              type="number"
-              placeholder="Cases"
-              value={editForm.cases}
-              onChange={(e) => setEditForm({ ...editForm, cases: e.target.value })}
-              required
-            />
-          </Form.Group>
-          <Form.Group>
-            <Form.Control
-              type="number"
-              placeholder="Deaths"
-              value={editForm.deaths}
-              onChange={(e) => setEditForm({ ...editForm, deaths: e.target.value })}
-              required
-            />
-          </Form.Group>
-          <Form.Group>
-            <Form.Control
-              type="date"
-              placeholder="Date"
-              value={editForm.date}
-              onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
-              required
-            />
-          </Form.Group>
-          <Form.Group>
-            <Form.Control
-              type="text"
-              placeholder="Regions"
-              value={editForm.regions}
-              onChange={(e) => setEditForm({ ...editForm, regions: e.target.value })}
-              required
-            />
-          </Form.Group>
-          <Button type="submit" variant="success" className="mt-2">Update Data</Button>
-          <Button variant="secondary" onClick={() => setEditingId(null)} className="mt-2 ml-2">Cancel</Button>
-        </form>
-      ) : (
-        <Table striped bordered hover className="mt-3">
-          <thead>
-            <tr>
-              <th>Location</th>
-              <th>Cases</th>
-              <th>Deaths</th>
-              <th>Date</th>
-              <th>Regions</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dengueData.map((data, index) => (
-              <tr key={index}>
-                <td>{data.location}</td>
-                <td>{data.cases}</td>
-                <td>{data.deaths}</td>
-                <td>{data.date}</td>
-                <td>{data.regions}</td>
-                <td>
-                  <Button variant="warning" onClick={() => handleEdit(data)}>Edit</Button>{" "}
-                  <Button variant="danger" onClick={() => handleDelete(data.id)}>Delete</Button>
-                </td>
-              </tr>
+          </Col>
+        </Row>
+
+        {editingId ? (
+          <Form onSubmit={handleUpdate} className="mb-4">
+            <h4>Edit Entry</h4>
+            {Object.keys(editForm).map((key) => (
+              <Form.Group key={key} className="mb-2">
+                <Form.Label>
+                  {key.charAt(0).toUpperCase() + key.slice(1)}
+                </Form.Label>
+                <Form.Control
+                  type="text"
+                  value={editForm[key]}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, [key]: e.target.value })
+                  }
+                  required
+                />
+              </Form.Group>
             ))}
-          </tbody>
-        </Table>
-      )}
+            <Button type="submit" variant="success" className="me-2">
+              Update Data
+            </Button>
+            <Button variant="secondary" onClick={() => setEditingId(null)}>
+              Cancel
+            </Button>
+          </Form>
+        ) : (
+          <Table striped bordered hover className="text-center mt-3">
+            <thead>
+              <tr>
+                <th>Location</th>
+                <th>Cases</th>
+                <th>Deaths</th>
+                <th>Date</th>
+                <th>Region</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentData.map((data) => (
+                <tr key={data.id}>
+                  <td>{data.loc}</td>
+                  <td>{data.cases}</td>
+                  <td>{data.deaths}</td>
+                  <td>{data.date}</td>
+                  <td>{data.Region}</td>
+                  <td>
+                    <Button
+                      variant="warning"
+                      onClick={() => handleEdit(data)}
+                      className="me-2"
+                    >
+                      <FontAwesomeIcon icon={faEdit} />
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={() => handleDelete(data.id)}
+                    >
+                      <FontAwesomeIcon icon={faTrash} />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+
+        {/* Pagination controls */}
+        <Row className="mt-3">
+          <Col md={6} className="d-flex align-items-center">
+            <span className="me-2">Show:</span>
+            <Form.Select
+              value={dataPerPage}
+              onChange={(e) => setDataPerPage(Number(e.target.value))}
+              style={{ width: "80px" }}
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+            </Form.Select>
+            <span style={{ marginLeft: "5px" }}>
+              of <strong>{dengueData.length}</strong> entries
+            </span>
+          </Col>
+          <Col md={6} className="d-flex justify-content-end align-items-center">
+            <Button
+              variant="primary"
+              className="me-2"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(currentPage - 1)}
+            >
+              Previous
+            </Button>
+            <span className="me-2">
+              Page {currentPage} of {totalPages}
+            </span>
+            <Button
+              variant="primary"
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(currentPage + 1)}
+            >
+              Next
+            </Button>
+          </Col>
+        </Row>
+      </Container>
     </Container>
   );
 };
